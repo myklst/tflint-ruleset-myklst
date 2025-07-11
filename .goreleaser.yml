@@ -45,9 +45,7 @@ signs:
       - '${artifact}'
 
 release:
-  github:
-    owner: myklst
-    name: tflint-ruleset-myklst
+  name_template: "v{{ .Version }}"
 
 snapshot:
   version_template: "{{ .Tag }}-dev"
