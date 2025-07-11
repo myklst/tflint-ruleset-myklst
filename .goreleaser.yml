@@ -44,9 +44,6 @@ signs:
       - '--detach-sign'
       - '${artifact}'
 
-release:
-  name_template: "v{{ .Version }}"
-
 snapshot:
   version_template: "{{ .Tag }}-dev"
 
