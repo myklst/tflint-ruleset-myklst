@@ -52,8 +52,14 @@ func (r *TerraformRequiredVariables) Check(runner tflint.Runner) error {
 		return err
 	}
 
-	// Required variables according to myklst Terraform standardization
-	config.RequiredVars = append(config.RequiredVars, "cloud_creds", "module_info", "module_tmpl")
+	// Set default required variables if none are specified.
+	if len(config.RequiredVars) == 0 {
+		config.RequiredVars = []string{
+			"cloud_creds",
+			"module_info",
+			"module_tmpl",
+		}
+	}
 
 	variables, err := runner.GetModuleContent(&hclext.BodySchema{
 		Blocks: []hclext.BlockSchema{
@@ -104,38 +110,43 @@ func (r *TerraformRequiredVariables) Check(runner tflint.Runner) error {
 
 	// Check for "cloud_creds" variable and its "sensitive" attribute
 	for _, variable := range variables.Blocks {
-		// Skip this check if the variable name matches any of the string in ignore_vars.
-		if variable.Labels[0] != "cloud_creds" {
-			continue
-		}
+		if variable.Labels[0] == "cloud_creds" {
+			sensitiveAttr, sensitiveExist := variable.Body.Attributes["sensitive"]
+			// Check if "sensitive" attribute exist.
+			if sensitiveExist {
+				sensitiveValue, _ := sensitiveAttr.Expr.(*hclsyntax.LiteralValueExpr)
+				// Check if "sensitive" attribute is placed under variable definition.
+				if sensitiveAttr.Range.Start.Line != variable.DefRange.End.Line+1 {
+					err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("variable `%s` must place `sensitive = true` as first parameter after variable definition", variable.Labels[0]),
+						sensitiveAttr.Range,
+					)
+					if err != nil {
+						return err
+					}
+				}
 
-		sensitiveAttr, sensitiveExist := variable.Body.Attributes["sensitive"]
-		if !sensitiveExist {
-			err := runner.EmitIssue(
-				r,
-				fmt.Sprintf("variable `%s` is missing the `sensitive` attribute", variable.Labels[0]),
-				variable.DefRange,
-			)
-			if err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		sensitiveValue, ok := sensitiveAttr.Expr.(*hclsyntax.LiteralValueExpr)
-		if !ok {
-			continue
-		}
-
-		if !sensitiveValue.Val.True() {
-			err := runner.EmitIssue(
-				r,
-				fmt.Sprintf("variable `%s` must have `sensitive = true` attribute defined", variable.Labels[0]),
-				sensitiveAttr.Range,
-			)
-			if err != nil {
-				return err
+				// Check if "sensitive" attribute value is `true`.
+				if !sensitiveValue.Val.True() {
+					err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("variable `%s` must have `sensitive = true` attribute defined", variable.Labels[0]),
+						sensitiveAttr.Range,
+					)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				err := runner.EmitIssue(
+					r,
+					fmt.Sprintf("variable `%s` is missing the `sensitive` attribute", variable.Labels[0]),
+					variable.DefRange,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

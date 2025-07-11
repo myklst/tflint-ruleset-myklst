@@ -1,6 +1,7 @@
 # terraform_required_variables
 
 Check whether the list of variables declared in `required_vars` are also declared in the Terraform module.
+If the variable name is "cloud_creds", then it must have `sensitive = true` parameters right after variable definition.
 
 ## Configuration
 

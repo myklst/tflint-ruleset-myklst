@@ -1,7 +1,9 @@
 # terraform_meta_arguments
 
 Check the sequences and format of `source`, `count`, `for_each`, `providers` and
-`provider` meta arguments in Terraform `module`, `resource` and `data source`.
+`provider` meta-arguments in Terraform `module`, `resource` and `data source`.
+Any comment lines before the meta-arguments are allowed, but an extra newline must
+be placed under each meta-arguments except meta-argument `lifecycle`.
 
 ## Terraform `module`
 
@@ -46,6 +48,22 @@ module "aws_ec2_instance" {
 }
 ```
 
+```hcl
+module "alicloud_ecs_instances" {
+  # I'm first comment.
+  source = "./alicloud-ecs-instance/"
+
+  # I'm second comment.
+  count = 3
+
+  providers = {
+    alicloud = alicloud.ecs
+  }
+
+  # ...
+}
+```
+
 ## Terraform `resource` and `data source`
 
 ### Format
@@ -60,7 +78,9 @@ module "aws_ec2_instance" {
      1. `provider` _(end with newline)_
      2. _(extra newline)_
   4. other attributes/blocks
-- `lifecycle{}` block must be placed as last block at the end of the resource without extra new lines.
+- `lifecycle{}` meta-argument
+  - block must have extra newline in one line above.
+  - block must be placed as last block at the end of the resource without extra new lines.
 
 ## Valid example
 
@@ -96,6 +116,23 @@ data "aws_ec2_instance" "my_instance" {
 
   # ...
 
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+```
+
+```hcl
+resource "aws_ec2_instance" "my_instance" {
+  # I'm first comment.
+  count = 3
+
+  # I'm second comment.
+  provider = aws.ec2
+
+  # ...
+
+  # I'm third comment.
   lifecycle {
     create_before_destroy = true
   }

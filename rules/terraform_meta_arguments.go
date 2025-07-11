@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
@@ -99,16 +98,19 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 				return diags
 			}
 
-			// currentRange is used to check the arrangement of 'source', 'count'/'for_each' and 'providers'.
-			// lastAttr is used to check new line after last argument.
-			currentRange := fileContent.DefRange
-			var lastAttr hcl.Attribute
+			// currentLine is used as a pointer to perform checking.
+			// filename is used in function countCommentLine().
+			var currentLine int
+			filename := fileContent.DefRange.Filename
+
+			// Move pointer 'currentLine' to next line after 'module' definition and ignore comment lines.
+			commentLines := r.countCommentLinesForward(file, filename, fileContent.DefRange.End.Line+1)
+			currentLine = fileContent.DefRange.End.Line + commentLines + 1
 
 			// Check meta argument 'source'.
 			source, sourceExist := content.Attributes["source"]
 			if sourceExist {
-				// 'source' is expected to be placed under 'module "my_module" {'.
-				if currentRange.End.Line+1 != source.Range.Start.Line {
+				if currentLine != source.Range.Start.Line {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has invalid 'source' meta argument arrangement", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -118,8 +120,25 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 					}
 					continue
 				}
-				currentRange = source.Range
-				lastAttr = *source
+				// Move pointer 'currentLine' to next line after 'source' meta argument and ignore comment lines.
+				commentLines := r.countCommentLinesForward(file, filename, source.Range.End.Line+1)
+				currentLine = source.Range.End.Line + commentLines + 1
+
+				// Check new line after meta argument 'source'.
+				if !r.isNewLine(file, filename, currentLine) {
+					if err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("%s '%s' has missing new line after 'source' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+						source.Range,
+					); err != nil {
+						return err
+					}
+					continue
+				}
+
+				// Move pointer 'currentLine' to next line after the new line and ignore comment lines.
+				commentLines = r.countCommentLinesForward(file, filename, currentLine+1)
+				currentLine = currentLine + commentLines + 1
 			}
 
 			// Check meta arguments 'count' or 'for_each'.
@@ -127,15 +146,7 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 			count, countExist := content.Attributes["count"]
 			forEach, forEachExist := content.Attributes["for_each"]
 			if countExist {
-				checkLine := currentRange.End.Line
-				if sourceExist {
-					// 'count' is expected to be placed under 'source = "./my-module/"' with an extra newline.
-					checkLine += 2
-				} else {
-					// 'count' is expected to be placed under 'resource "my_type" "my_name" {'.
-					checkLine += 1
-				}
-				if checkLine != count.Range.Start.Line {
+				if currentLine != count.Range.Start.Line {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has invalid 'count' meta argument arrangement", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -145,20 +156,27 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 					}
 					continue
 				}
-				currentRange = count.Range
-				if count.Range.Start.Line > lastAttr.Range.Start.Line {
-					lastAttr = *count
+				// Move pointer 'currentLine' to next line after 'count' meta argument and ignore comment lines.
+				commentLines := r.countCommentLinesForward(file, filename, count.Range.End.Line+1)
+				currentLine = count.Range.End.Line + commentLines + 1
+
+				// Check new line after meta argument 'count'.
+				if !r.isNewLine(file, filename, currentLine) {
+					if err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("%s '%s' has missing new line after 'count' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+						count.Range,
+					); err != nil {
+						return err
+					}
+					continue
 				}
+
+				// Move pointer 'currentLine' to next line after the new line and ignore comment lines.
+				commentLines = r.countCommentLinesForward(file, filename, currentLine+1)
+				currentLine = currentLine + commentLines + 1
 			} else if forEachExist {
-				checkLine := currentRange.End.Line
-				if sourceExist {
-					// 'for_each' is expected to be placed under 'source = "./my-module/"' with an extra newline.
-					checkLine += 2
-				} else {
-					// 'for_each' is expected to be placed under 'resource "my_type" "my_name" {'.
-					checkLine += 1
-				}
-				if checkLine != forEach.Range.Start.Line {
+				if currentLine != forEach.Range.Start.Line {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has invalid 'for_each' meta argument arrangement", fileContent.Type, fileContent.Labels[0]),
@@ -168,65 +186,72 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 					}
 					continue
 				}
-				currentRange = forEach.Range
-				if forEach.Range.Start.Line > lastAttr.Range.Start.Line {
-					lastAttr = *forEach
+				// Move pointer 'currentLine' to next line after 'for_each' meta argument and ignore comment lines.
+				commentLines := r.countCommentLinesForward(file, filename, forEach.Range.End.Line+1)
+				currentLine = forEach.Range.End.Line + commentLines + 1
+
+				// Check new line after meta argument 'for_each'.
+				if !r.isNewLine(file, filename, currentLine) {
+					if err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("%s '%s' has missing new line after 'for_each' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+						forEach.Range,
+					); err != nil {
+						return err
+					}
+					continue
 				}
+
+				// Move pointer 'currentLine' to next line after the new line and ignore comment lines.
+				commentLines = r.countCommentLinesForward(file, filename, currentLine+1)
+				currentLine = currentLine + commentLines + 1
 			}
 
 			// Check meta arguments 'providers' or 'provider'.
 			var providerExist bool
 			var provider *hcl.Attribute
-			var errMsg string
+			var placementErrMsg, newLineErrMsg string
 
 			switch fileContent.Type {
 			case "module":
 				provider, providerExist = content.Attributes["providers"]
-				errMsg = fmt.Sprintf("%s '%s' has invalid 'providers' meta argument arrangement",
+				placementErrMsg = fmt.Sprintf("%s '%s' has invalid 'providers' meta argument arrangement",
+					fileContent.Type, strings.Join(fileContent.Labels, "."))
+				newLineErrMsg = fmt.Sprintf("%s '%s' has missing new line after 'providers' meta argument",
 					fileContent.Type, strings.Join(fileContent.Labels, "."))
 			case "resource", "data": // Combined case since they have identical handling
 				provider, providerExist = content.Attributes["provider"]
-				errMsg = fmt.Sprintf("%s '%s' has invalid 'provider' meta argument arrangement",
+				placementErrMsg = fmt.Sprintf("%s '%s' has invalid 'provider' meta argument arrangement",
+					fileContent.Type, strings.Join(fileContent.Labels, "."))
+				newLineErrMsg = fmt.Sprintf("%s '%s' has missing new line after 'provider' meta argument",
 					fileContent.Type, strings.Join(fileContent.Labels, "."))
 			}
 
 			if providerExist {
-				checkLine := currentRange.End.Line
-				if sourceExist || countExist || forEachExist {
-					// 'providers' is expected to be placed under 'count=0' or 'for_each={}' with an extra newline.
-					checkLine += 2
-				} else {
-					// 'providers' is expected to be placed under 'resource "my_type" "my_name" {'.
-					checkLine += 1
-				}
-				if checkLine != provider.Range.Start.Line {
+				if currentLine != provider.Range.Start.Line {
 					if err := runner.EmitIssue(
 						r,
-						errMsg,
+						placementErrMsg,
 						provider.Range,
 					); err != nil {
 						return err
 					}
 					continue
 				}
-				currentRange = provider.Range
-				if provider.Range.Start.Line > lastAttr.Range.Start.Line {
-					lastAttr = *provider
-				}
-			}
+				// Move pointer 'currentLine' to next line after 'provider' meta argument and ignore comment lines.
+				commentLines := r.countCommentLinesForward(file, filename, provider.Range.End.Line+1)
+				currentLine = provider.Range.End.Line + commentLines + 1
 
-			// Check new line after 'source', 'count', 'for_each', 'providers' or 'provider.
-			if sourceExist || countExist || forEachExist || providerExist {
-				lines := bytes.Split(file.Bytes, []byte("\n"))
-				checkLine := lines[lastAttr.Range.End.Line]
-				if strings.TrimSpace(string(checkLine)) != "" {
+				// Check new line after meta argument 'provider'.
+				if !r.isNewLine(file, filename, currentLine) {
 					if err := runner.EmitIssue(
 						r,
-						fmt.Sprintf("%s '%s' has missing new line after meta argument '%s'", fileContent.Type, strings.Join(fileContent.Labels, "."), lastAttr.Name),
-						lastAttr.Range,
+						newLineErrMsg,
+						provider.Range,
 					); err != nil {
 						return err
 					}
+					continue
 				}
 			}
 
@@ -257,7 +282,24 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 					}
 				}
 
-				if lifecycleFullRange.End.Line+1 != contentEndLine {
+				// Check if newline exist one line before 'lifecycle' meta argument and ignore comment lines.
+				commentLines := r.countCommentLinesBackward(file, filename, lifecycleFullRange.Start.Line-1)
+				checkLine := lifecycleFullRange.Start.Line - commentLines - 1
+				if !r.isNewLine(file, filename, checkLine) {
+					if err := runner.EmitIssue(
+						r,
+						fmt.Sprintf("%s '%s' has missing new line before 'lifecycle' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+						lifecycleFullRange,
+					); err != nil {
+						return err
+					}
+					continue
+				}
+
+				// Check if lifecycle is placed at the end of the module/resource/data source and ignore comment lines.
+				commentLines = r.countCommentLinesForward(file, filename, lifecycleFullRange.End.Line+1)
+				checkLine = lifecycleFullRange.End.Line + commentLines + 1
+				if checkLine != contentEndLine {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has invalid 'lifecycle' meta argument arrangement", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -271,4 +313,60 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 	}
 
 	return nil
+}
+
+func (r *TerraformMetaArguments) isNewLine(file *hcl.File, filename string, checkLine int) bool {
+	tokens, _ := hclsyntax.LexConfig(file.Bytes, filename, hcl.Pos{Line: 1, Column: 1})
+
+	for i, token := range tokens {
+		// Empty new lines are expected to have two TokenNewLine continuously.
+		if token.Range.End.Line == checkLine && token.Range.End.Column == 1 {
+			if i+1 <= len(tokens) && token.Type == hclsyntax.TokenNewline && tokens[i+1].Type == hclsyntax.TokenNewline {
+				return true
+			} else {
+				return false
+			}
+		}
+	}
+	return false
+}
+
+func (r *TerraformMetaArguments) countCommentLinesForward(file *hcl.File, filename string, startingLine int) int {
+	var commentLinesCount int
+	tokens, _ := hclsyntax.LexConfig(file.Bytes, filename, hcl.Pos{Line: 1, Column: 1})
+
+checking:
+	for {
+		for _, token := range tokens {
+			if token.Range.Start.Line == startingLine+commentLinesCount {
+				if token.Type == hclsyntax.TokenComment {
+					commentLinesCount++
+					continue checking
+				} else {
+					return commentLinesCount
+				}
+			}
+		}
+		return commentLinesCount
+	}
+}
+
+func (r *TerraformMetaArguments) countCommentLinesBackward(file *hcl.File, filename string, startingLine int) int {
+	var commentLinesCount int
+	tokens, _ := hclsyntax.LexConfig(file.Bytes, filename, hcl.Pos{Line: 1, Column: 1})
+
+checking:
+	for {
+		for _, token := range tokens {
+			if token.Range.Start.Line == startingLine-commentLinesCount {
+				if token.Type == hclsyntax.TokenComment {
+					commentLinesCount++
+					continue checking
+				} else {
+					return commentLinesCount
+				}
+			}
+		}
+		return commentLinesCount
+	}
 }
