@@ -24,6 +24,17 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "source only in module with comment",
+			Content: `
+module "my_module" {
+  # I'm a comment.
+  source = "./my-module/"
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "source and count only in module",
 			Content: `
 module "my_module" {
@@ -36,11 +47,39 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "source and count only in module with comments",
+			Content: `
+module "my_module" {
+  # I'm first comment.
+  source = "./my-module/"
+
+  # I'm second comment.
+  count = 3
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "source and for_each only in module",
 			Content: `
 module "my_module" {
   source = "./my-module/"
 
+  for_each = {}
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "source and for_each only in module with comments",
+			Content: `
+module "my_module" {
+  # I'm first comment.
+  source = "./my-module/"
+
+  # I'm second comment.
   for_each = {}
 
   name = "my name"
@@ -62,6 +101,23 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "source, count and providers in module with comments",
+			Content: `
+module "my_module" {
+  # I'm first comment.
+  source = "./my-module/"
+
+  # I'm second comment.
+  count = {}
+
+  # I'm third comment.
+  providers = {}
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "source, for_each and providers in module",
 			Content: `
 module "my_module" {
@@ -69,6 +125,23 @@ module "my_module" {
 
   for_each = {}
 
+  providers = {}
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "source, for_each and providers in module with comments",
+			Content: `
+module "my_module" {
+  # I'm first comment.
+  source = "./my-module/"
+
+  # I'm second comment.
+  for_each = {}
+
+  # I'm third comment.
   providers = {}
 
   name = "my name"
@@ -86,9 +159,31 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "count only in resource with comment",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm a comment.
+  count = 3
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "for_each only in resource",
 			Content: `
 resource "foo" "my_resource" {
+  for_each = {}
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "for_each only in resource with comment",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm a comment.
   for_each = {}
 
   name = "my name"
@@ -106,9 +201,33 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "provider only in resource with comment",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm a comment.
+  provider = foo.default
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "count and provider in resource",
 			Content: `
 resource "foo" "my_resource" {
+  count = 3
+
+  provider = foo.default
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "count and provider in resource with comments",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm a comment.
   count = 3
 
   provider = foo.default
@@ -130,11 +249,36 @@ data "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "count and provider in data source with comments",
+			Content: `
+data "foo" "my_resource" {
+  # I'm first comment.
+  count = 3
+
+  # I'm second comment.
+  provider = foo.default
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "lifecycle in resource",
 			Content: `
 resource "foo" "my_resource" {
   name = "my name"
 
+  lifecycle {}
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "lifecycle in resource with comment",
+			Content: `
+resource "foo" "my_resource" {
+  name = "my name"
+
+  # I'm a comment.
   lifecycle {}
 }`,
 			Expected: helper.Issues{},
@@ -152,6 +296,44 @@ resource "foo" "my_resource" {
   lifecycle {}
 }`,
 			Expected: helper.Issues{},
+		},
+		{
+			Name: "count, provider and lifecycle in resource with comments",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm first comment.
+  count = 3
+
+  # I'm second comment.
+  provider = foo.default
+
+  name = "my name"
+
+  # I'm third comment.
+  lifecycle {}
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "source only in module, invalid arrangement",
+			Content: `
+module "my_module" {
+
+  source = "./my-module/"
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformMetaArguments(),
+					Message: "module 'my_module' has invalid 'source' meta argument arrangement",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 4, Column: 3},
+						End:      hcl.Pos{Line: 4, Column: 26},
+					},
+				},
+			},
 		},
 		{
 			Name: "source and count in module, invalid arrangement",
@@ -255,7 +437,7 @@ module "my_module" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformMetaArguments(),
-					Message: "module 'my_module' has missing new line after meta argument 'source'",
+					Message: "module 'my_module' has missing new line after 'source' meta argument",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 3, Column: 3},
@@ -276,7 +458,7 @@ module "my_module" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformMetaArguments(),
-					Message: "module 'my_module' has missing new line after meta argument 'count'",
+					Message: "module 'my_module' has missing new line after 'count' meta argument",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 5, Column: 3},
@@ -299,11 +481,50 @@ module "my_module" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformMetaArguments(),
-					Message: "module 'my_module' has missing new line after meta argument 'providers'",
+					Message: "module 'my_module' has missing new line after 'providers' meta argument",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 7, Column: 3},
 						End:      hcl.Pos{Line: 7, Column: 17},
+					},
+				},
+			},
+		},
+		{
+			Name: "lifecycle in resource, missing new line",
+			Content: `
+resource "foo" "my_resource" {
+  name = "my name"
+  lifecycle {}
+}`,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformMetaArguments(),
+					Message: "resource 'foo.my_resource' has missing new line before 'lifecycle' meta argument",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 4, Column: 3},
+						End:      hcl.Pos{Line: 4, Column: 15},
+					},
+				},
+			},
+		},
+		{
+			Name: "lifecycle in resource with comment, missing new line",
+			Content: `
+resource "foo" "my_resource" {
+  name = "my name"
+  # I'm a comment.
+  lifecycle {}
+}`,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformMetaArguments(),
+					Message: "resource 'foo.my_resource' has missing new line before 'lifecycle' meta argument",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 5, Column: 3},
+						End:      hcl.Pos{Line: 5, Column: 15},
 					},
 				},
 			},
