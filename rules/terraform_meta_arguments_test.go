@@ -18,13 +18,21 @@ func Test_TerraformMetaArguments(t *testing.T) {
 			Content: `
 module "my_module" {
   source = "./my-module/"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "source and attributes in module",
+			Content: `
+module "my_module" {
+  source = "./my-module/"
 
   name = "my name"
 }`,
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source only in module with comment",
+			Name: "source and attributes in module with comment",
 			Content: `
 module "my_module" {
   # I'm a comment.
@@ -35,7 +43,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source and count only in module",
+			Name: "source, count and attributes in module",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -47,7 +55,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source and count only in module with comments",
+			Name: "source, count and attributes in module with comments",
 			Content: `
 module "my_module" {
   # I'm first comment.
@@ -61,7 +69,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source and for_each only in module",
+			Name: "source, for_each and attributes in module",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -73,7 +81,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source and for_each only in module with comments",
+			Name: "source, for_each and attributes in module with comments",
 			Content: `
 module "my_module" {
   # I'm first comment.
@@ -87,7 +95,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source, count and providers in module",
+			Name: "source, count, providers and attributes in module",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -101,7 +109,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source, count and providers in module with comments",
+			Name: "source, count, providers and attributes in module with comments",
 			Content: `
 module "my_module" {
   # I'm first comment.
@@ -118,7 +126,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source, for_each and providers in module",
+			Name: "source, for_each, providers and attributes in module",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -132,7 +140,7 @@ module "my_module" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source, for_each and providers in module with comments",
+			Name: "source, for_each, providers and attributes in module with comments",
 			Content: `
 module "my_module" {
   # I'm first comment.
@@ -153,19 +161,6 @@ module "my_module" {
 			Content: `
 resource "foo" "my_resource" {
   count = 3
-
-  name = "my name"
-}`,
-			Expected: helper.Issues{},
-		},
-		{
-			Name: "count only in resource with comment",
-			Content: `
-resource "foo" "my_resource" {
-  # I'm a comment.
-  count = 3
-
-  name = "my name"
 }`,
 			Expected: helper.Issues{},
 		},
@@ -174,13 +169,40 @@ resource "foo" "my_resource" {
 			Content: `
 resource "foo" "my_resource" {
   for_each = {}
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "provider only in resource",
+			Content: `
+resource "foo" "my_resource" {
+  provider = foo.default
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "count and attributes in resource with comment",
+			Content: `
+resource "foo" "my_resource" {
+  # I'm a comment.
+  count = 3
 
   name = "my name"
 }`,
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "for_each only in resource with comment",
+			Name: "for_each and attributes in resource",
+			Content: `
+resource "foo" "my_resource" {
+  for_each = {}
+
+  name = "my name"
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "for_each and attributes in resource with comment",
 			Content: `
 resource "foo" "my_resource" {
   # I'm a comment.
@@ -191,7 +213,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "provider only in resource",
+			Name: "provider and attributes in resource",
 			Content: `
 resource "foo" "my_resource" {
   provider = foo.default
@@ -201,7 +223,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "provider only in resource with comment",
+			Name: "provider and attributes in resource with comment",
 			Content: `
 resource "foo" "my_resource" {
   # I'm a comment.
@@ -212,7 +234,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count and provider in resource",
+			Name: "count, provider and attributes in resource",
 			Content: `
 resource "foo" "my_resource" {
   count = 3
@@ -224,7 +246,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count and provider in resource with comments",
+			Name: "count, provider and attributes in resource with comments",
 			Content: `
 resource "foo" "my_resource" {
   # I'm a comment.
@@ -237,7 +259,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count and provider in data source",
+			Name: "count, provider and attributes in data source",
 			Content: `
 data "foo" "my_resource" {
   count = 3
@@ -249,7 +271,7 @@ data "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count and provider in data source with comments",
+			Name: "count, provider and attributes in data source with comments",
 			Content: `
 data "foo" "my_resource" {
   # I'm first comment.
@@ -263,7 +285,15 @@ data "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "lifecycle in resource",
+			Name: "lifecycle only in resource",
+			Content: `
+resource "foo" "my_resource" {
+  lifecycle {}
+}`,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "lifecycle and attributes in resource",
 			Content: `
 resource "foo" "my_resource" {
   name = "my name"
@@ -273,7 +303,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "lifecycle in resource with comment",
+			Name: "lifecycle and attributes in resource with comment",
 			Content: `
 resource "foo" "my_resource" {
   name = "my name"
@@ -284,7 +314,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count, provider and lifecycle in resource",
+			Name: "count, provider, lifecycle and attributes in resource",
 			Content: `
 resource "foo" "my_resource" {
   count = 3
@@ -298,7 +328,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "count, provider and lifecycle in resource with comments",
+			Name: "count, provider, lifecycle and attributes in resource with comments",
 			Content: `
 resource "foo" "my_resource" {
   # I'm first comment.
@@ -315,7 +345,7 @@ resource "foo" "my_resource" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "source only in module, invalid arrangement",
+			Name: "source and attributes in module, invalid arrangement",
 			Content: `
 module "my_module" {
 
@@ -336,7 +366,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "source and count in module, invalid arrangement",
+			Name: "source, count and attributes in module, invalid arrangement",
 			Content: `
 module "my_module" {
   count = 3
@@ -358,7 +388,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "count, provider in resource, invalid arrangement",
+			Name: "count, provider and attributes in resource, invalid arrangement",
 			Content: `
 resource "foo" "my_resource" {
   provider = foo.default
@@ -380,7 +410,7 @@ resource "foo" "my_resource" {
 			},
 		},
 		{
-			Name: "count, provider and lifecycle in resource, invalid arrangement",
+			Name: "count, provider, lifecycle and attributes in resource, invalid arrangement",
 			Content: `
 resource "foo" "my_resource" {
   count = 3
@@ -398,13 +428,13 @@ resource "foo" "my_resource" {
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 7, Column: 3},
-						End:      hcl.Pos{Line: 7, Column: 15},
+						End:      hcl.Pos{Line: 7, Column: 12},
 					},
 				},
 			},
 		},
 		{
-			Name: "source, count and providers in module, invalid arrangement",
+			Name: "source, count, providers and attributes in module, invalid arrangement",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -428,7 +458,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "source only in module, missing new line",
+			Name: "source and attributes in module, missing new line",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -447,7 +477,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "source and count only in module, missing new line",
+			Name: "source, count and attributes in module, missing new line",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -468,7 +498,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "source, count and providers in module, missing new line",
+			Name: "source, count, providers and attributes in module, missing new line",
 			Content: `
 module "my_module" {
   source = "./my-module/"
@@ -491,7 +521,7 @@ module "my_module" {
 			},
 		},
 		{
-			Name: "lifecycle in resource, missing new line",
+			Name: "lifecycle and attributes in resource, missing new line",
 			Content: `
 resource "foo" "my_resource" {
   name = "my name"
@@ -504,13 +534,13 @@ resource "foo" "my_resource" {
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 4, Column: 3},
-						End:      hcl.Pos{Line: 4, Column: 15},
+						End:      hcl.Pos{Line: 4, Column: 12},
 					},
 				},
 			},
 		},
 		{
-			Name: "lifecycle in resource with comment, missing new line",
+			Name: "lifecycle and attributes in resource with comment, missing new line",
 			Content: `
 resource "foo" "my_resource" {
   name = "my name"
@@ -524,7 +554,7 @@ resource "foo" "my_resource" {
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 5, Column: 3},
-						End:      hcl.Pos{Line: 5, Column: 15},
+						End:      hcl.Pos{Line: 5, Column: 12},
 					},
 				},
 			},

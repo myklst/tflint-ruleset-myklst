@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/myklst/tflint-ruleset-myklst/project"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
 	"github.com/zclconf/go-cty/cty"
@@ -68,7 +69,7 @@ func (r *TerraformVarsObjectKeysNamingConventions) Severity() tflint.Severity {
 
 // Link returns the rule reference link
 func (r *TerraformVarsObjectKeysNamingConventions) Link() string {
-	return "https://github.com/myklst/tflint-ruleset-myklst/docs/rules/teraform_vars_object_keys_naming_conventions.md"
+	return project.ReferenceLink(r.Name())
 }
 
 // Check verifies that top-level attributes in object-type variables follow naming standards.

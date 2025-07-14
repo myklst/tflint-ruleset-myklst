@@ -3,7 +3,9 @@
 Check the sequences and format of `source`, `count`, `for_each`, `providers` and
 `provider` meta-arguments in Terraform `module`, `resource` and `data source`.
 Any comment lines before the meta-arguments are allowed, but an extra newline must
-be placed under each meta-arguments except meta-argument `lifecycle`.
+be placed under each meta-arguments except meta-argument `lifecycle`. If there are
+no other attributes before/after the meta-arguments, then new line condition is
+not checked.
 
 ## Terraform `module`
 

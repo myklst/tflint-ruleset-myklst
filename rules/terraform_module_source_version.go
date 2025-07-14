@@ -9,6 +9,7 @@ import (
 
 	"github.com/Masterminds/semver"
 	"github.com/hashicorp/go-getter"
+	"github.com/myklst/tflint-ruleset-myklst/project"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
 )
@@ -43,10 +44,10 @@ func (r *TerraformModuleSourceVersion) Severity() tflint.Severity {
 
 // Link returns the rule reference link
 func (r *TerraformModuleSourceVersion) Link() string {
-	return "https://github.com/myklst/tflint-ruleset-myklst/docs/rules/terraform_module_source_version.md"
+	return project.ReferenceLink(r.Name())
 }
 
-// Link returns the rule reference link
+// Check checks whether module source have version
 func (r *TerraformModuleSourceVersion) Check(runner tflint.Runner) error {
 	config := &TerraformModuleSourceVersionConfig{}
 

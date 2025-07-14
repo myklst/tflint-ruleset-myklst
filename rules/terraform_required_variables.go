@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/myklst/tflint-ruleset-myklst/project"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
 )
@@ -41,7 +42,7 @@ func (r *TerraformRequiredVariables) Severity() tflint.Severity {
 
 // Link returns the rule reference link
 func (r *TerraformRequiredVariables) Link() string {
-	return "https://github.com/myklst/tflint-ruleset-myklst/docs/rules/terraform_required_variables.md"
+	return project.ReferenceLink(r.Name())
 }
 
 // Check checks whether required_vars have been declared as variables within the module

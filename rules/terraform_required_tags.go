@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/myklst/tflint-ruleset-myklst/project"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
 	"github.com/zclconf/go-cty/cty"
@@ -43,7 +44,7 @@ func (r *TerraformRequiredTags) Severity() tflint.Severity {
 
 // Link returns the rule reference link
 func (r *TerraformRequiredTags) Link() string {
-	return "https://github.com/myklst/tflint-ruleset-myklst/docs/rules/terraform_required_tags.md"
+	return project.ReferenceLink(r.Name())
 }
 
 // Check checks whether resources have the required tags if applicable
