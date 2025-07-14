@@ -100,8 +100,10 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 
 			// currentLine is used as a pointer to perform checking.
 			// filename is used in function countCommentLine().
+			// fileContentBody is used to check resource block ending line.
 			var currentLine int
 			filename := fileContent.DefRange.Filename
+			fileContentBody := fileContent.Body.(*hclsyntax.Body)
 
 			// Move pointer 'currentLine' to next line after 'module' definition and ignore comment lines.
 			commentLines := r.countCommentLinesForward(file, filename, fileContent.DefRange.End.Line+1)
@@ -125,7 +127,8 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 				currentLine = source.Range.End.Line + commentLines + 1
 
 				// Check new line after meta argument 'source'.
-				if !r.isNewLine(file, filename, currentLine) {
+				// Ignore if next line is end of resource (there is no other attributes).
+				if currentLine != fileContentBody.EndRange.Start.Line && !r.isNewLine(file, filename, currentLine) {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has missing new line after 'source' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -161,7 +164,8 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 				currentLine = count.Range.End.Line + commentLines + 1
 
 				// Check new line after meta argument 'count'.
-				if !r.isNewLine(file, filename, currentLine) {
+				// Ignore if next line is end of resource (there is no other attributes).
+				if currentLine != fileContentBody.EndRange.Start.Line && !r.isNewLine(file, filename, currentLine) {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has missing new line after 'count' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -191,7 +195,8 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 				currentLine = forEach.Range.End.Line + commentLines + 1
 
 				// Check new line after meta argument 'for_each'.
-				if !r.isNewLine(file, filename, currentLine) {
+				// Ignore if next line is end of resource (there is no other attributes).
+				if currentLine != fileContentBody.EndRange.Start.Line && !r.isNewLine(file, filename, currentLine) {
 					if err := runner.EmitIssue(
 						r,
 						fmt.Sprintf("%s '%s' has missing new line after 'for_each' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
@@ -243,7 +248,8 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 				currentLine = provider.Range.End.Line + commentLines + 1
 
 				// Check new line after meta argument 'provider'.
-				if !r.isNewLine(file, filename, currentLine) {
+				// Ignore if next line is end of resource (there is no other attributes).
+				if currentLine != fileContentBody.EndRange.Start.Line && !r.isNewLine(file, filename, currentLine) {
 					if err := runner.EmitIssue(
 						r,
 						newLineErrMsg,
@@ -256,56 +262,35 @@ func (r *TerraformMetaArguments) Check(runner tflint.Runner) error {
 			}
 
 			// Check meta argument 'lifecycle'.
-			lifeCycleBlocks := content.Blocks.OfType("lifecycle")
-			if len(lifeCycleBlocks) > 0 {
-				var lifecycleFullRange hcl.Range
-				var contentEndLine int
-				contentFile, err := runner.GetFile(fileContent.DefRange.Filename)
-				if err != nil {
-					return err
-				}
-
-				// Locate the resource to get completed resource range.
-				resourceFileBody := contentFile.Body.(*hclsyntax.Body)
-				for _, fileBlock := range resourceFileBody.Blocks {
-					if fileBlock.Type == "resource" || fileBlock.Type == "data" {
-						if fileBlock.Labels[0]+fileBlock.Labels[1] == fileContent.Labels[0]+fileContent.Labels[1] {
-							contentEndLine = fileBlock.Range().End.Line
-							for _, bodyBlock := range fileBlock.Body.Blocks {
-								if bodyBlock.Type == "lifecycle" {
-									lifecycleFullRange = bodyBlock.Range()
-									break
-								}
-							}
-							break
+			for _, contentBlock := range content.Blocks {
+				if contentBlock.Type == "lifecycle" {
+					// Check if newline exist one line before 'lifecycle' meta argument and ignore comment lines.
+					// Ignore if next line is end of resource (there is no other attributes).
+					commentLines := r.countCommentLinesBackward(file, filename, contentBlock.DefRange.Start.Line-1)
+					checkLine := contentBlock.DefRange.Start.Line - commentLines - 1
+					if checkLine != fileContent.DefRange.Start.Line && !r.isNewLine(file, filename, checkLine) {
+						if err := runner.EmitIssue(
+							r,
+							fmt.Sprintf("%s '%s' has missing new line before 'lifecycle' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+							contentBlock.DefRange,
+						); err != nil {
+							return err
 						}
+						continue
 					}
-				}
 
-				// Check if newline exist one line before 'lifecycle' meta argument and ignore comment lines.
-				commentLines := r.countCommentLinesBackward(file, filename, lifecycleFullRange.Start.Line-1)
-				checkLine := lifecycleFullRange.Start.Line - commentLines - 1
-				if !r.isNewLine(file, filename, checkLine) {
-					if err := runner.EmitIssue(
-						r,
-						fmt.Sprintf("%s '%s' has missing new line before 'lifecycle' meta argument", fileContent.Type, strings.Join(fileContent.Labels, ".")),
-						lifecycleFullRange,
-					); err != nil {
-						return err
-					}
-					continue
-				}
-
-				// Check if lifecycle is placed at the end of the module/resource/data source and ignore comment lines.
-				commentLines = r.countCommentLinesForward(file, filename, lifecycleFullRange.End.Line+1)
-				checkLine = lifecycleFullRange.End.Line + commentLines + 1
-				if checkLine != contentEndLine {
-					if err := runner.EmitIssue(
-						r,
-						fmt.Sprintf("%s '%s' has invalid 'lifecycle' meta argument arrangement", fileContent.Type, strings.Join(fileContent.Labels, ".")),
-						lifecycleFullRange,
-					); err != nil {
-						return err
+					// Check if lifecycle is placed at the end of the module/resource/data source and ignore comment lines.
+					lifeCycleBlockBody := contentBlock.Body.(*hclsyntax.Body)
+					commentLines = r.countCommentLinesForward(file, filename, lifeCycleBlockBody.SrcRange.End.Line+1)
+					checkLine = lifeCycleBlockBody.SrcRange.End.Line + commentLines + 1
+					if checkLine != fileContentBody.EndRange.End.Line {
+						if err := runner.EmitIssue(
+							r,
+							fmt.Sprintf("%s '%s' has invalid 'lifecycle' meta argument arrangement", fileContent.Type, strings.Join(fileContent.Labels, ".")),
+							contentBlock.DefRange,
+						); err != nil {
+							return err
+						}
 					}
 				}
 			}
