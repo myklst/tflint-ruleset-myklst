@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/myklst/tflint-ruleset-myklst/project"
 	"github.com/terraform-linters/tflint-plugin-sdk/hclext"
 	"github.com/terraform-linters/tflint-plugin-sdk/tflint"
 )
@@ -39,7 +40,7 @@ func (r *TerraformAnyTypeVariables) Severity() tflint.Severity {
 
 // Link returns the rule reference link
 func (r *TerraformAnyTypeVariables) Link() string {
-	return "https://github.com/myklst/tflint-ruleset-myklst/docs/rules/terraform_any_type_variables.md"
+	return project.ReferenceLink(r.Name())
 }
 
 // Check checks whether variables have type
