@@ -1,6 +1,9 @@
 # terraform_required_tags
 
-This rule checks that all Terraform resources with a `tags` block include the required tag keys defined in the rule configuration. It supports both direct tag maps and `merge()` expressions, specifically allowing `merge(local.tags, {...})`, and will evaluate and combine all tag keys before validating them. If `local.tags` is missing, it reports an issue. Additionally, for AWS resources, it enforces the presence of a `Name` tag. Unsupported expressions or function calls in tags will trigger a warning. Resources listed in the excluded list are skipped.
+This rule checks whether all Terraform resources with `tags` attribute had included the required tag keys as defined in
+the rule configuration. It will perform the checking even when the value is exact value(object/list), using local variable,
+using terraform function `merge()` or `concat()` together with the local variable. Additionally, for AWS resources, it
+enforces the presence of a `Name` tag. Unsupported expressions or function calls in tags will be ignored.
 
 ## Configuration
 
@@ -12,7 +15,8 @@ This rule checks that all Terraform resources with a `tags` block include the re
 
 #### `tags`
 
-The `tags` option defines the list of tags that needs to be included for any resources that has the `tags` block. Defaults to the following list:
+The `tags` option defines the list of tags that needs to be included for any resources that has the `tags` block.
+Defaults to the following list:
 
 ```hcl
 tags = [
@@ -27,7 +31,24 @@ tags = [
 
 #### `excluded_resources`
 
-The `excluded_resources` option defines the list of resources type to be ignored in ths rule checking. Defaults to an empty list.
+The `excluded_resources` option defines the list of resources to be ignored in ths rule checking. There will be two ways
+to define the excluding resources,
+- with only resource type: '\${resource_type}'. This configuration will skip checking for all resources 'aws_s3_bucket'.
+For example,
+  ```hcl
+  rule "terraform_required_tags" {
+    enabled            = true
+    excluded_resources = ["aws_s3_bucket"]
+  }
+  ```
+- with resource type and label: '\${resource_type}.\${resource_label}'. This configuration will skip checking for resource
+'aws_s3_bucket.my_bucket', regardless of it's count/for_each. For example,
+  ```hcl
+  rule "terraform_required_tags" {
+    enabled            = true
+    excluded_resources = ["aws_s3_bucket.my_bucket"]
+  }
+  ```
 
 ## Example
 
@@ -43,14 +64,6 @@ rule "terraform_required_tags" {
 ### Sample terraform source file
 
 ```hcl
-local {
-  tags = {
-    example_tag1 = "value1"
-    example_tag2 = "value2"
-    example_tag3 = "value3"
-  }
-}
-
 resource "my_resource" "my_resource_name" {
   name = "test"
 
@@ -91,14 +104,6 @@ rule "terraform_required_tags" {
 ### Sample terraform source file
 
 ```hcl
-local {
-  tags = {
-    example_tag1 = "value1"
-    example_tag2 = "value2"
-    example_tag3 = "value3"
-  }
-}
-
 // resource "my_excluded_resource" will not be enforced
 resource "my_excluded_resource" "my_resource_name" {
   name = "test"

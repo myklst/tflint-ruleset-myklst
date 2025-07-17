@@ -15,65 +15,8 @@ func Test_TerraformRequiredTags(t *testing.T) {
 		Expected helper.Issues
 	}{
 		{
-			Name: "resource with the correct tags, but terraform module with no local variable `tags`.",
+			Name: "resource without any tags block.",
 			Content: `
-resource "my_resource" "my_resource_name" {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-`,
-			Config: testTerraformRequiredTagsConfig,
-			Expected: helper.Issues{
-				{
-					Rule:    NewTerraformRequiredTags(),
-					Message: "missing required local variable `tags`",
-					Range: hcl.Range{
-						Start: hcl.Pos{Line: 1, Column: 1},
-						End:   hcl.Pos{Line: 1, Column: 1},
-					},
-				},
-			},
-		},
-		{
-			Name: "resource with the incorrect tags, but terraform module with no local variable `tags`.",
-			Content: `
-resource "my_resource" "my_resource_name" {
-  tags = {
-    my_incorrect_tag = "my_tag"
-  }
-}
-`,
-			Config: testTerraformRequiredTagsConfig,
-			Expected: helper.Issues{
-				{
-					Rule:    NewTerraformRequiredTags(),
-					Message: "missing required local variable `tags`",
-					Range: hcl.Range{
-						Start: hcl.Pos{Line: 1, Column: 1},
-						End:   hcl.Pos{Line: 1, Column: 1},
-					},
-				},
-				{
-					Rule:    NewTerraformRequiredTags(),
-					Message: "my_resource 'my_resource_name' is missing required tags: [my_required_tag]",
-					Range: hcl.Range{
-						Filename: "main.tf",
-						Start:    hcl.Pos{Line: 3, Column: 10},
-						End:      hcl.Pos{Line: 5, Column: 4},
-					},
-				},
-			},
-		},
-		{
-			Name: "resource without any tags block, and local variable `tags` with the correct keys.",
-			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-
 resource "my_resource" "my_resource_name" {
   name = "test"
 }
@@ -82,14 +25,8 @@ resource "my_resource" "my_resource_name" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "resource with the correct tags, and local variable `tags` with the correct keys.",
+			Name: "resource with the correct required tags.",
 			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-
 resource "my_resource" "my_resource_name" {
   name = "test"
 
@@ -98,24 +35,12 @@ resource "my_resource" "my_resource_name" {
   }
 }
 `,
-			Config: `
-rule "terraform_required_tags" {
-  enabled            = true
-
-  tags               = ["my_required_tag"]
-  excluded_resources = ["my_excluded_resource"]
-}
-`,
+			Config:   testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "resource with the incorrect tags, and local variable `tags` with the correct keys.",
+			Name: "resource with the missing required tags.",
 			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
 
 resource "my_resource" "my_resource_name" {
   name = "test"
@@ -129,24 +54,18 @@ resource "my_resource" "my_resource_name" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "my_resource 'my_resource_name' is missing required tags: [my_required_tag]",
+					Message: "resource 'my_resource.my_resource_name' is missing required tags: ['my_required_tag']",
 					Range: hcl.Range{
 						Filename: "main.tf",
-						Start:    hcl.Pos{Line: 11, Column: 10},
-						End:      hcl.Pos{Line: 13, Column: 4},
+						Start:    hcl.Pos{Line: 6, Column: 10},
+						End:      hcl.Pos{Line: 8, Column: 4},
 					},
 				},
 			},
 		},
 		{
-			Name: "resource that is excluded from the rule, and local variable `tags` with the correct keys.",
+			Name: "resource that is excluded from the rule with resource type",
 			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-
 resource "my_excluded_resource" "my_excluded_resource_name" {
   name = "test"
 
@@ -159,14 +78,46 @@ resource "my_excluded_resource" "my_excluded_resource_name" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "aws resource with the correct tags, and local variable `tags` with the correct keys.",
+			Name: "resource that is excluded from the rule with resource type and label.",
 			Content: `
-locals {
+resource "my_excluded_resource_v2" "my_resource" {
+  name = "test"
+
   tags = {
-    my_required_tag = "my_tag"
+    my_incorrect_tag = "my_tag"
   }
 }
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "resource that is excluded from the rule with resource type and label, but mismatched label.",
+			Content: `
+resource "my_excluded_resource_v2" "not_my_resource" {
+  name = "test"
 
+  tags = {
+    my_incorrect_tag = "my_tag"
+  }
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformRequiredTags(),
+					Message: "resource 'my_excluded_resource_v2.not_my_resource' is missing required tags: ['my_required_tag']",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 5, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 4},
+					},
+				},
+			},
+		},
+		{
+			Name: "aws resource with the correct required tags.",
+			Content: `
 resource "aws_resource" "my_resource_name" {
   name = "test"
 
@@ -180,14 +131,8 @@ resource "aws_resource" "my_resource_name" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "aws resource with but required tags but no `Name` tag, and local variable `tags` with the correct keys.",
+			Name: "aws resource with correct required tags but missing 'Name' tag.",
 			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-
 resource "aws_resource" "my_resource_name" {
   name = "test"
 
@@ -200,25 +145,19 @@ resource "aws_resource" "my_resource_name" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "aws_resource 'my_resource_name' is missing required tag: Name",
+					Message: "aws resources must have 'Name' tag: 'aws_resource.my_resource_name'",
 					Range: hcl.Range{
 						Filename: "main.tf",
-						Start:    hcl.Pos{Line: 11, Column: 10},
-						End:      hcl.Pos{Line: 13, Column: 4},
+						Start:    hcl.Pos{Line: 5, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 4},
 					},
 				},
 			},
 		},
 		{
-			Name: "aws resource with the incorrect tags and no `Name` tags, and local variable `tags` with the correct keys.",
+			Name: "aws resource with missing required tags and no 'Name' tags.",
 			Content: `
-locals {
-  tags = {
-    my_required_tag = "my_tag"
-  }
-}
-
-resource "aws_resource" "my_resource_name" {
+resource "aws_s3_bucket" "my_resource_name" {
   name = "test"
 
   tags = {
@@ -230,26 +169,26 @@ resource "aws_resource" "my_resource_name" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "aws_resource 'my_resource_name' is missing required tags: [my_required_tag]",
+					Message: "resource 'aws_s3_bucket.my_resource_name' is missing required tags: ['my_required_tag']",
 					Range: hcl.Range{
 						Filename: "main.tf",
-						Start:    hcl.Pos{Line: 11, Column: 10},
-						End:      hcl.Pos{Line: 13, Column: 4},
+						Start:    hcl.Pos{Line: 5, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 4},
 					},
 				},
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "aws_resource 'my_resource_name' is missing required tag: Name",
+					Message: "aws resources must have 'Name' tag: 'aws_s3_bucket.my_resource_name'",
 					Range: hcl.Range{
 						Filename: "main.tf",
-						Start:    hcl.Pos{Line: 11, Column: 10},
-						End:      hcl.Pos{Line: 13, Column: 4},
+						Start:    hcl.Pos{Line: 5, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 4},
 					},
 				},
 			},
 		},
 		{
-			Name: "aws resource with `Name` tag, merged with local variable `tags` with the correct keys.",
+			Name: "aws resource with 'Name' tag, merged with local variable `tags` with the correct required tags.",
 			Content: `
 locals {
   tags = {
@@ -270,7 +209,7 @@ resource "aws_instance" "aws_resource_name" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "aws resource with no `Name` tag, merged with local variable `tags` with the incorrect keys.",
+			Name: "aws resource with no 'Name' tag, merged with local variable `tags` with the missing required keys.",
 			Content: `
 locals {
   tags = {
@@ -279,7 +218,7 @@ locals {
   }
 }
 
-resource "aws_resource" "aws_resource_name" {
+resource "aws_resource" "my_resource_name" {
   tags = merge(local.tags, {
     testTag = "test"
   })
@@ -289,7 +228,7 @@ resource "aws_resource" "aws_resource_name" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "aws_resource 'aws_resource_name' is missing required tag: Name",
+					Message: "resource 'aws_resource.my_resource_name' is missing required tags: ['my_required_tag']",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 10, Column: 10},
@@ -298,7 +237,7 @@ resource "aws_resource" "aws_resource_name" {
 				},
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "aws_resource 'aws_resource_name' is missing required tags: [my_required_tag]",
+					Message: "aws resources must have 'Name' tag: 'aws_resource.my_resource_name'",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 10, Column: 10},
@@ -308,7 +247,7 @@ resource "aws_resource" "aws_resource_name" {
 			},
 		},
 		{
-			Name: "resource using local variable as tags, and local variable `tags` with the correct default keys.",
+			Name: "resource using local variable as tags, and local variable `tags` with the correct default required tags.",
 			Content: `
 locals {
   tags = {
@@ -333,7 +272,7 @@ rule "terraform_required_tags" {
 			Expected: helper.Issues{},
 		},
 		{
-			Name: "resource using local variable as tags, and local variable `tags` with the incorrect default keys.",
+			Name: "resource using local variable as tags, and local variable `tags` with the missing default required tags.",
 			Content: `
 locals {
   tags = {
@@ -355,11 +294,155 @@ rule "terraform_required_tags" {
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
-					Message: "my_resource 'my_resource_name' is missing required tags: [devops_project_kind, devops_project_group, devops_project_name]",
+					Message: "resource 'my_resource.my_resource_name' is missing required tags: ['devops_project_kind', 'devops_project_group', 'devops_project_name']",
 					Range: hcl.Range{
 						Filename: "main.tf",
 						Start:    hcl.Pos{Line: 11, Column: 10},
 						End:      hcl.Pos{Line: 11, Column: 20},
+					},
+				},
+			},
+		},
+		{
+			Name: "resource with correct required tags (list of string).",
+			Content: `
+resource "foo" "my_resource" {
+  tags = ["my_required_tag:dev"]
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "resource with correct required tags (list of string) when referring to local variable.",
+			Content: `
+locals {
+  tags = ["my_required_tag:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags =  local.tags
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "resource with correct required tags (list of string) after concating local variable.",
+			Content: `
+locals {
+  tags = ["my_required_tag:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags = concat(local.tags, ["my_tag_2:prod"])
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "resource with correct required tags (list of string) when concating other local variable.",
+			Content: `
+locals {
+  tags = ["my_tag_2:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags = concat(local.tags, ["my_required_tag:prod"])
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "resource with missing required tags (list of string).",
+			Content: `
+resource "foo" "my_resource" {
+  tags = ["my_incorrect_tag:dev"]
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformRequiredTags(),
+					Message: "resource 'foo.my_resource' is missing required tags: ['my_required_tag']",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 3, Column: 10},
+						End:      hcl.Pos{Line: 3, Column: 34},
+					},
+				},
+			},
+		},
+		{
+			Name: "resource with missing required tags (list of string) when referring to local variable.",
+			Content: `
+locals {
+  tags = ["my_incorrect_tag:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags =  local.tags
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformRequiredTags(),
+					Message: "resource 'foo.my_resource' is missing required tags: ['my_required_tag']",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 7, Column: 11},
+						End:      hcl.Pos{Line: 7, Column: 21},
+					},
+				},
+			},
+		},
+		{
+			Name: "resource with missing required tags (list of string) after concating local variable.",
+			Content: `
+locals {
+  tags = ["my_incorrect_tag:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags = concat(local.tags, ["my_tag_2:prod"])
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformRequiredTags(),
+					Message: "resource 'foo.my_resource' is missing required tags: ['my_required_tag']",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 7, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 47},
+					},
+				},
+			},
+		},
+		{
+			Name: "resource with missing required tags (list of string) when concating other local variable.",
+			Content: `
+locals {
+  tags = ["my_tag_2:dev"]
+}
+
+resource "foo" "my_resource" {
+  tags = concat(local.tags, ["my_incorrect_tag:prod"])
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{
+				{
+					Rule:    NewTerraformRequiredTags(),
+					Message: "resource 'foo.my_resource' is missing required tags: ['my_required_tag']",
+					Range: hcl.Range{
+						Filename: "main.tf",
+						Start:    hcl.Pos{Line: 7, Column: 10},
+						End:      hcl.Pos{Line: 7, Column: 55},
 					},
 				},
 			},
@@ -388,6 +471,6 @@ rule "terraform_required_tags" {
   enabled            = true
 
   tags               = ["my_required_tag"]
-  excluded_resources = ["my_excluded_resource"]
+  excluded_resources = ["my_excluded_resource", "my_excluded_resource_v2.my_resource"]
 }
 `
