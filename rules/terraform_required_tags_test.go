@@ -102,7 +102,7 @@ resource "my_excluded_resource_v2" "not_my_resource" {
   }
 }
 `,
-			Config:   testTerraformRequiredTagsConfig,
+			Config: testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
@@ -362,7 +362,7 @@ resource "foo" "my_resource" {
   tags = ["my_incorrect_tag:dev"]
 }
 `,
-			Config:   testTerraformRequiredTagsConfig,
+			Config: testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
@@ -386,7 +386,7 @@ resource "foo" "my_resource" {
   tags =  local.tags
 }
 `,
-			Config:   testTerraformRequiredTagsConfig,
+			Config: testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
@@ -410,7 +410,7 @@ resource "foo" "my_resource" {
   tags = concat(local.tags, ["my_tag_2:prod"])
 }
 `,
-			Config:   testTerraformRequiredTagsConfig,
+			Config: testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
@@ -434,7 +434,7 @@ resource "foo" "my_resource" {
   tags = concat(local.tags, ["my_incorrect_tag:prod"])
 }
 `,
-			Config:   testTerraformRequiredTagsConfig,
+			Config: testTerraformRequiredTagsConfig,
 			Expected: helper.Issues{
 				{
 					Rule:    NewTerraformRequiredTags(),
