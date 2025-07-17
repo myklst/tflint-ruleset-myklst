@@ -141,8 +141,32 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 				tagKeys = slices.Concat(tagKeys, localVarTagsKey)
 			}
 
-		// When it's actual list or object values in tags field.
-		case *hclsyntax.TupleConsExpr, *hclsyntax.ObjectConsExpr:
+		// When it's actual list values in tags field.
+		case *hclsyntax.TupleConsExpr:
+			if err := runner.EvaluateExpr(expr, func(val cty.Value) error {
+				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
+				return nil
+			}, nil); err != nil {
+				// Manually parse the list when the error is Unknown variable.
+				// This might happen because TFLint do not know the actual value
+				// when using locals or variables in the string.
+				if strings.Contains(err.Error(), "Unknown variable") {
+					for _, e := range expr.Exprs {
+						if tmplExpr, ok := e.(*hclsyntax.TemplateExpr); ok {
+							for _, part := range tmplExpr.Parts {
+								if partExpr, ok := part.(*hclsyntax.LiteralValueExpr); ok {
+									tagKeys = append(tagKeys, strings.Split(partExpr.Val.AsString(), ":")[0])
+								}
+							}
+						}
+					}
+				} else {
+					return err
+				}
+			}
+
+		// When it's actual object values in tags field.
+		case *hclsyntax.ObjectConsExpr:
 			if err := runner.EvaluateExpr(expr, func(val cty.Value) error {
 				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
 				return nil
