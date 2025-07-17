@@ -147,10 +147,11 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
 				return nil
 			}, nil); err != nil {
-				// Manually parse the list when the error is Unknown variable.
+				// Manually parse the list when the error is Unknown variable or
+				// Attempt to get attribute from null value.
 				// This might happen because TFLint do not know the actual value
 				// when using locals or variables in the string.
-				if strings.Contains(err.Error(), "Unknown variable") {
+				if strings.Contains(err.Error(), "Unknown variable") || strings.Contains(err.Error(), "Attempt to get attribute from null value") {
 					for _, e := range expr.Exprs {
 						if tmplExpr, ok := e.(*hclsyntax.TemplateExpr); ok {
 							for _, part := range tmplExpr.Parts {
