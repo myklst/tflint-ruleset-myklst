@@ -67,47 +67,6 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 		}
 	}
 
-	// Get and evaluate `local.tags`
-	localTagsAttr, err := r.getLocalTags(runner)
-	if err != nil {
-		return err
-	}
-
-	var localTags cty.Value
-	var localTagKeys []string
-
-	if localTagsAttr == nil {
-		err := runner.EmitIssue(
-			r,
-			"missing required local variable `tags`",
-			hcl.Range{
-				Start: hcl.Pos{Line: 1, Column: 1},
-				End:   hcl.Pos{Line: 1, Column: 1},
-			},
-		)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := runner.EvaluateExpr(localTagsAttr.Expr, func(val cty.Value) error {
-			localTags = val
-			return nil
-		}, nil)
-		if err != nil {
-			return err
-		}
-
-		// Store all the key from `local.tags` if applicable
-		if !localTags.IsKnown() || localTags.IsNull() || !localTags.CanIterateElements() {
-			return nil
-		} else {
-			for it := localTags.ElementIterator(); it.Next(); {
-				k, _ := it.Element()
-				localTagKeys = append(localTagKeys, k.AsString())
-			}
-		}
-	}
-
 	// Parse resources and check their `tags` blocks
 	resources, err := runner.GetModuleContent(&hclext.BodySchema{
 		Blocks: []hclext.BlockSchema{
@@ -127,80 +86,117 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 	}
 
 	for _, resource := range resources.Blocks {
-		if slices.Contains(config.ExcludedResources, resource.Labels[0]) {
+		// If the resource is stated in excluded_resources, then ignore checking.
+		if slices.Contains(config.ExcludedResources, resource.Labels[0]) || slices.Contains(config.ExcludedResources, fmt.Sprintf("%s.%s", resource.Labels[0], resource.Labels[1])) {
 			continue
 		}
 
+		// If the resource do not have attribute "tags", then ignore checking.
 		tagsAttr, tagsExist := resource.Body.Attributes["tags"]
 		if !tagsExist {
 			continue
 		}
 
+		// tagKeys is used to compare with required_tags to check any missing tags.
 		var tagKeys []string
-		var evalErr error
-
+		// Check the value of tags and invoke different logics to evaluate.
 		switch expr := tagsAttr.Expr.(type) {
 		// Usage of function calls like merge(local.tags, { ... })
 		case *hclsyntax.FunctionCallExpr:
-			if expr.Name == "merge" {
+			switch expr.Name {
+			case "merge":
 				for _, arg := range expr.Args {
-					// If the argument is `local.tags`, inject keys directly
-					if varExpr, ok := arg.(*hclsyntax.ScopeTraversalExpr); ok && varExpr.Traversal.RootName() == "local" {
-						tagKeys = append(tagKeys, localTagKeys...)
-						continue
-					}
-
-					// Otherwise, evaluate and extract keys
-					err := runner.EvaluateExpr(arg, func(val cty.Value) error {
-						if val.IsKnown() && val.CanIterateElements() {
-							for it := val.ElementIterator(); it.Next(); {
-								k, _ := it.Element()
-								tagKeys = append(tagKeys, k.AsString())
+					if traversal, ok := arg.(*hclsyntax.ScopeTraversalExpr); ok {
+						// If the argument is a valid local variable invocation, then
+						// evaluate the value and get the tag key.
+						if localVarName, ok := r.extractLocalVarName(traversal); ok {
+							localVarTagsKey, err := r.evaluateLocalVarTagsKey(runner, localVarName)
+							if err != nil {
+								return err
 							}
+							tagKeys = slices.Concat(tagKeys, localVarTagsKey)
 						}
-						return nil
-					}, nil)
-
-					if err != nil {
-						evalErr = err
-						break
+					} else {
+						// Otherwise, evaluate and extract keys.
+						if err := runner.EvaluateExpr(arg, func(val cty.Value) error {
+							tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
+							return nil
+						}, nil); err != nil {
+							return err
+						}
 					}
 				}
-			} else {
-				// Ignore any terraform function calls other than `merge`
-				continue
+			case "concat":
+				for _, arg := range expr.Args {
+					if traversal, ok := arg.(*hclsyntax.ScopeTraversalExpr); ok {
+						// If the argument is a valid local variable invocation, then
+						// evaluate the value and get the tag key.
+						if localVarName, ok := r.extractLocalVarName(traversal); ok {
+							localVarTagsKey, err := r.evaluateLocalVarTagsKey(runner, localVarName)
+							if err != nil {
+								return err
+							}
+							tagKeys = slices.Concat(tagKeys, localVarTagsKey)
+						}
+					} else {
+						// Otherwise, evaluate and extract keys.
+						if err := runner.EvaluateExpr(arg, func(val cty.Value) error {
+							tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
+							return nil
+						}, nil); err != nil {
+							keys, ok := r.handleEvaluateTupleError(err, arg.(*hclsyntax.TupleConsExpr))
+							if !ok {
+								return err
+							} else {
+								tagKeys = slices.Concat(tagKeys, keys)
+							}
+						}
+					}
+				}
 			}
 
 		// Direct use of local variable on tags
 		// E.g. tags = local.tags
 		case *hclsyntax.ScopeTraversalExpr:
-			if expr.Traversal.RootName() == "local" {
-				tagKeys = append(tagKeys, localTagKeys...)
-			} else {
-				continue
+			if localVarName, ok := r.extractLocalVarName(expr); ok {
+				localVarTagsKey, err := r.evaluateLocalVarTagsKey(runner, localVarName)
+				if err != nil {
+					return err
+				}
+				tagKeys = slices.Concat(tagKeys, localVarTagsKey)
 			}
 
-		default:
-			evalErr = runner.EvaluateExpr(tagsAttr.Expr, func(val cty.Value) error {
-				if val.IsKnown() && val.CanIterateElements() {
-					for it := val.ElementIterator(); it.Next(); {
-						k, _ := it.Element()
-						tagKeys = append(tagKeys, k.AsString())
-					}
-				}
+		// When it's actual list values in tags field.
+		case *hclsyntax.TupleConsExpr:
+			if err := runner.EvaluateExpr(expr, func(val cty.Value) error {
+				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
 				return nil
-			}, nil)
-		}
+			}, nil); err != nil {
+				keys, ok := r.handleEvaluateTupleError(err, expr)
+				if !ok {
+					return err
+				} else {
+					tagKeys = slices.Concat(tagKeys, keys)
+				}
+			}
 
-		if evalErr != nil {
-			return evalErr
+		// When it's actual object values in tags field.
+		case *hclsyntax.ObjectConsExpr:
+			if err := runner.EvaluateExpr(expr, func(val cty.Value) error {
+				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
+				return nil
+			}, nil); err != nil {
+				return err
+			}
+
+		// Do nothing if unknown type.
+		default:
+			continue
 		}
 
 		// Remove any duplicated keys if any
 		tagKeys = slices.Compact(tagKeys)
-
 		var missing []string
-
 		for _, requiredTags := range config.Tags {
 			if !slices.Contains(tagKeys, requiredTags) {
 				missing = append(missing, requiredTags)
@@ -211,7 +207,7 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 		if len(missing) > 0 {
 			err := runner.EmitIssue(
 				r,
-				fmt.Sprintf("%s '%s' is missing required tags: [%s]", resource.Labels[0], resource.Labels[1], strings.Join(missing, ", ")),
+				fmt.Sprintf("resource '%s.%s' is missing required tags: ['%s']", resource.Labels[0], resource.Labels[1], strings.Join(missing, "', '")),
 				tagsAttr.Expr.Range(),
 			)
 			if err != nil {
@@ -223,7 +219,7 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 		if r.isAwsResource(resource.Labels[0]) && !slices.Contains(tagKeys, "Name") {
 			err := runner.EmitIssue(
 				r,
-				fmt.Sprintf("%s '%s' is missing required tag: Name", resource.Labels[0], resource.Labels[1]),
+				fmt.Sprintf("aws resources must have 'Name' tag: '%s.%s'", resource.Labels[0], resource.Labels[1]),
 				tagsAttr.Expr.Range(),
 			)
 			if err != nil {
@@ -231,7 +227,6 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -240,30 +235,102 @@ func (r *TerraformRequiredTags) isAwsResource(resource string) bool {
 	return strings.HasPrefix(resource, "aws_")
 }
 
-// Function to determine whether local variable `tags` exists.
-func (r *TerraformRequiredTags) getLocalTags(runner tflint.Runner) (*hclext.Attribute, error) {
+// Extract the traversal expression to get the variable name, return false if it
+// is not an valid local variable invocation.
+// For example, a valid traversal expression to invoke local variable would be
+// 'local.my_tags'.
+func (r *TerraformRequiredTags) extractLocalVarName(traversal *hclsyntax.ScopeTraversalExpr) (string, bool) {
+	if len(traversal.Traversal) >= 2 {
+		rootName := traversal.Traversal[0].(hcl.TraverseRoot).Name
+		if rootName == "local" {
+			return traversal.Traversal[1].(hcl.TraverseAttr).Name, true
+		}
+	}
+	return "", false
+}
+
+func (r *TerraformRequiredTags) evaluateLocalVarTagsKey(runner tflint.Runner, localVarName string) ([]string, error) {
 	locals, err := runner.GetModuleContent(&hclext.BodySchema{
 		Blocks: []hclext.BlockSchema{
 			{
 				Type: "locals",
 				Body: &hclext.BodySchema{
 					Attributes: []hclext.AttributeSchema{
-						{Name: "tags"},
+						{Name: localVarName},
 					},
 				},
 			},
 		},
 	}, nil)
-
 	if err != nil {
 		return nil, err
 	}
 
+	var localTagKeys []string
 	for _, block := range locals.Blocks {
-		if attr, ok := block.Body.Attributes["tags"]; ok {
-			return attr, nil
+		if localVarAttr, ok := block.Body.Attributes[localVarName]; ok {
+			var localVarExpr cty.Value
+			if err = runner.EvaluateExpr(localVarAttr.Expr, func(val cty.Value) error {
+				localVarExpr = val
+				return nil
+			}, nil); err != nil {
+				return nil, err
+			}
+			localTagKeys = slices.Concat(localTagKeys, r.getTagsKey(localVarExpr))
 		}
 	}
+	return localTagKeys, nil
+}
 
-	return nil, nil
+func (r *TerraformRequiredTags) getTagsKey(val cty.Value) []string {
+	if val.IsKnown() && !val.IsNull() && val.CanIterateElements() {
+		var localTagKeys []string
+		if val.Type().IsObjectType() {
+			// If tags is object value
+			for it := val.ElementIterator(); it.Next(); {
+				k, _ := it.Element()
+				localTagKeys = append(localTagKeys, k.AsString())
+			}
+		} else if val.Type().IsTupleType() {
+			// If tags is list value, used in Openstack provider like compute_instance_v2.
+			for it := val.ElementIterator(); it.Next(); {
+				_, v := it.Element()
+				localTagKeys = append(localTagKeys, r.splitTagKeyString(v))
+			}
+		}
+		return localTagKeys
+	}
+	return []string{}
+}
+
+// Handle error when trying to evaluate tuple values by manually Manually parsing
+// the list when the error is unknown variable or null value.
+// This might happen because TFLint do not know the actual value when using locals,
+// variable or output from other resources in the string.
+func (r *TerraformRequiredTags) handleEvaluateTupleError(err error, expr *hclsyntax.TupleConsExpr) ([]string, bool) {
+	var tagsKey []string
+	if strings.Contains(err.Error(), "Unknown variable") || strings.Contains(err.Error(), "Attempt to get attribute from null value") || strings.Contains(err.Error(), "This object does not have an attribute named") {
+		for _, e := range expr.Exprs {
+			if tmplExpr, ok := e.(*hclsyntax.TemplateExpr); ok {
+				for _, part := range tmplExpr.Parts {
+					if partExpr, ok := part.(*hclsyntax.LiteralValueExpr); ok {
+						tagsKey = append(tagsKey, r.splitTagKeyString(partExpr.Val))
+					}
+				}
+			}
+		}
+		return tagsKey, true
+	} else {
+		return nil, false
+	}
+}
+
+// Split a single tag key in string with delimiter ':'.
+func (r *TerraformRequiredTags) splitTagKeyString(val cty.Value) string {
+	// If the value is unknown, AsString() will throw panic errors.
+	if !val.IsWhollyKnown() {
+		return strings.Split(val.Range().StringPrefix(), ":")[0]
+	} else {
+		return strings.Split(val.AsString(), ":")[0]
+	}
 }
