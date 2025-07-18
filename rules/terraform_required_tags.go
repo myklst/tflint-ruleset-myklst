@@ -103,7 +103,8 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 		switch expr := tagsAttr.Expr.(type) {
 		// Usage of function calls like merge(local.tags, { ... })
 		case *hclsyntax.FunctionCallExpr:
-			if expr.Name == "merge" || expr.Name == "concat" {
+			switch expr.Name {
+			case "merge":
 				for _, arg := range expr.Args {
 					if traversal, ok := arg.(*hclsyntax.ScopeTraversalExpr); ok {
 						// If the argument is a valid local variable invocation, then
@@ -125,9 +126,33 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 						}
 					}
 				}
-			} else {
-				// Ignore any terraform function calls other than `merge`
-				continue
+			case "concat":
+				for _, arg := range expr.Args {
+					if traversal, ok := arg.(*hclsyntax.ScopeTraversalExpr); ok {
+						// If the argument is a valid local variable invocation, then
+						// evaluate the value and get the tag key.
+						if localVarName, ok := r.extractLocalVarName(traversal); ok {
+							localVarTagsKey, err := r.evaluateLocalVarTagsKey(runner, localVarName)
+							if err != nil {
+								return err
+							}
+							tagKeys = slices.Concat(tagKeys, localVarTagsKey)
+						}
+					} else {
+						// Otherwise, evaluate and extract keys.
+						if err := runner.EvaluateExpr(arg, func(val cty.Value) error {
+							tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
+							return nil
+						}, nil); err != nil {
+							keys, ok := r.handleEvaluateTupleError(err, arg.(*hclsyntax.TupleConsExpr))
+							if !ok {
+								return err
+							} else {
+								tagKeys = slices.Concat(tagKeys, keys)
+							}
+						}
+					}
+				}
 			}
 
 		// Direct use of local variable on tags
@@ -147,22 +172,11 @@ func (r *TerraformRequiredTags) Check(runner tflint.Runner) error {
 				tagKeys = slices.Concat(tagKeys, r.getTagsKey(val))
 				return nil
 			}, nil); err != nil {
-				// Manually parse the list when the error is Unknown variable or
-				// Attempt to get attribute from null value.
-				// This might happen because TFLint do not know the actual value
-				// when using locals or variables in the string.
-				if strings.Contains(err.Error(), "Unknown variable") || strings.Contains(err.Error(), "Attempt to get attribute from null value") {
-					for _, e := range expr.Exprs {
-						if tmplExpr, ok := e.(*hclsyntax.TemplateExpr); ok {
-							for _, part := range tmplExpr.Parts {
-								if partExpr, ok := part.(*hclsyntax.LiteralValueExpr); ok {
-									tagKeys = append(tagKeys, strings.Split(partExpr.Val.AsString(), ":")[0])
-								}
-							}
-						}
-					}
-				} else {
+				keys, ok := r.handleEvaluateTupleError(err, expr)
+				if !ok {
 					return err
+				} else {
+					tagKeys = slices.Concat(tagKeys, keys)
 				}
 			}
 
@@ -281,10 +295,42 @@ func (r *TerraformRequiredTags) getTagsKey(val cty.Value) []string {
 			// If tags is list value, used in Openstack provider like compute_instance_v2.
 			for it := val.ElementIterator(); it.Next(); {
 				_, v := it.Element()
-				localTagKeys = append(localTagKeys, strings.Split(v.AsString(), ":")[0])
+				localTagKeys = append(localTagKeys, r.splitTagKeyString(v))
 			}
 		}
 		return localTagKeys
 	}
 	return []string{}
+}
+
+// Handle error when trying to evaluate tuple values by manually Manually parsing
+// the list when the error is unknown variable or null value.
+// This might happen because TFLint do not know the actual value when using locals,
+// variable or output from other resources in the string.
+func (r *TerraformRequiredTags) handleEvaluateTupleError(err error, expr *hclsyntax.TupleConsExpr) ([]string, bool) {
+	var tagsKey []string
+	if strings.Contains(err.Error(), "Unknown variable") || strings.Contains(err.Error(), "Attempt to get attribute from null value") || strings.Contains(err.Error(), "This object does not have an attribute named") {
+		for _, e := range expr.Exprs {
+			if tmplExpr, ok := e.(*hclsyntax.TemplateExpr); ok {
+				for _, part := range tmplExpr.Parts {
+					if partExpr, ok := part.(*hclsyntax.LiteralValueExpr); ok {
+						tagsKey = append(tagsKey, r.splitTagKeyString(partExpr.Val))
+					}
+				}
+			}
+		}
+		return tagsKey, true
+	} else {
+		return nil, false
+	}
+}
+
+// Split a single tag key in string with delimiter ':'.
+func (r *TerraformRequiredTags) splitTagKeyString(val cty.Value) string {
+	// If the value is unknown, AsString() will throw panic errors.
+	if !val.IsWhollyKnown() {
+		return strings.Split(val.Range().StringPrefix(), ":")[0]
+	} else {
+		return strings.Split(val.AsString(), ":")[0]
+	}
 }
