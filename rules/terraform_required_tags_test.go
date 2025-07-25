@@ -209,6 +209,101 @@ resource "aws_instance" "aws_resource_name" {
 			Expected: helper.Issues{},
 		},
 		{
+			Name: "aws resource with 'Name' tag and the correct required tags, merged with nested local variable `tags` with function call.",
+			Content: `
+variable "my_tags" {
+  type = map(string)
+}
+
+locals {
+  tags = merge(var.my_tags, {
+    brand           = "foo"
+    project         = "bar"
+    env             = "dev"
+    my_required_tag = "test"
+  })
+}
+
+resource "aws_instance" "aws_resource_name" {
+  tags = merge(local.tags, {
+    Name = "aws_instance-test"
+  })
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "aws resource with 'Name' tag and the correct required tags, merged with nested local variable `tags` with single nested local variable.",
+			Content: `
+locals {
+  my_tags = {
+    brand           = "foo"
+    project         = "bar"
+    env             = "dev"
+    my_required_tag = "test"
+  }
+  tags = local.my_tags
+}
+
+resource "aws_instance" "aws_resource_name" {
+  tags = merge(local.tags, {
+    Name = "aws_instance-test"
+  })
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "aws resource with 'Name' tag and the correct required tags, merged with nested local variable `tags` with function call and single nested local variable.",
+			Content: `
+locals {
+  my_tags = {
+    brand           = "foo"
+    project         = "bar"
+    env             = "dev"
+  }
+  tags = merge(local.my_tags, {
+    my_required_tag = "test"
+  })
+}
+
+resource "aws_instance" "aws_resource_name" {
+  tags = merge(local.tags, {
+    Name = "aws_instance-test"
+  })
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
+			Name: "aws resource with 'Name' tag and the correct required tags, merged with nested local variable `tags` with multiple function calls and nested local variables.",
+			Content: `
+locals {
+  our_tags = {
+    brand           = "foo"
+    project         = "bar"
+  }
+  my_tags = merge(local.our_tags , {
+    my_required_tag = "test"
+  })
+  tags = merge(local.my_tags, {
+    env             = "dev"
+  })
+}
+
+resource "aws_instance" "aws_resource_name" {
+  tags = merge(local.tags, {
+    Name = "aws_instance-test"
+  })
+}
+`,
+			Config:   testTerraformRequiredTagsConfig,
+			Expected: helper.Issues{},
+		},
+		{
 			Name: "aws resource with no 'Name' tag, merged with local variable `tags` with the missing required keys.",
 			Content: `
 locals {
