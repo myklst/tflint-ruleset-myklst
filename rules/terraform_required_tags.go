@@ -145,7 +145,8 @@ func (r *TerraformRequiredTags) isAwsResource(resource string) bool {
 	return strings.HasPrefix(resource, "aws_")
 }
 
-// This function will perform a deep traverse into every nested local variables used.
+// This function will perform a deep traverse into every nested local variables
+// used, check the value of tags and invoke different logics to evaluate.
 func (r *TerraformRequiredTags) traverseSearchExpr(runner tflint.Runner, expr hcl.Expression) ([]string, error) {
 	var tagKeys []string
 	// Check the value of tags and invoke different logics to evaluate.
